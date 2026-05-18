@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aap-mcp-servers"
+version = "1.0.0"
+description = "Unified MCP server monorepo for AAP — 13 vendor integrations"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.12"
+authors = [{name = "Steve Fulmer", email = "sfulmer@redhat.com"}]
+dependencies = [
+    "mcp>=0.9.0",
+    "requests>=2.28.0",
+]
+
+[project.optional-dependencies]
+ansible = ["ansible-runner>=2.3.0"]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "flake8>=6.0"]
+
+[project.scripts]
+mcp-elastic = "src.servers.elastic:main"
+mcp-weka = "src.servers.weka:main"
+mcp-mongodb = "src.servers.mongodb:main"
+mcp-datadog = "src.servers.datadog:main"
+mcp-coreweave = "src.servers.coreweave:main"
+mcp-ddn = "src.servers.ddn:main"
+mcp-newrelic = "src.servers.newrelic:main"
+mcp-oci = "src.servers.oci:main"
+mcp-truenas = "src.servers.truenas:main"
+mcp-vastdata = "src.servers.vastdata:main"
+mcp-oracledb = "src.servers.oracledb:main"
+mcp-mssql = "src.servers.mssql:main"
+mcp-extreme = "src.servers.extreme:main"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
