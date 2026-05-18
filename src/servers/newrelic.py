@@ -1,133 +1,132 @@
-"""MCP Server for New Relic."""
+"""MCP Server for MCP Server for New Relic."""
 
 import asyncio
 import json
 import logging
 
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent
+
 from src.common.client import BaseClient
 from src.common.bridge import AnsibleBridge
-from src.common.factory import create_server, read_op, write_op, run_server
 
 logger = logging.getLogger(__name__)
 
 
+async def read_op(client, operation, params):
+    """Execute a read operation (direct API)."""
+    return await client.query(operation, params)
+
+
+async def write_op(runner, operation, params):
+    """Execute a write operation (through Ansible)."""
+    return await runner.execute(operation, params)
+
+
 class NewrelicClient(BaseClient):
-    """Direct API client for New Relic."""
+    """Direct API client for MCP Server for New Relic."""
 
     def __init__(self):
         super().__init__("NEWRELIC_HOST", "NEWRELIC_API_KEY")
 
 
 def create_newrelic_server():
-    """Create and configure the New Relic MCP server."""
-    server = create_server("mcp-newrelic")
+    """Create and configure the MCP server."""
+    server = Server("mcp-newrelic")
     client = NewrelicClient()
     runner = AnsibleBridge("stevefulme1.newrelic")
 
-    @server.tool()
-    async def nrql_query(params: dict) -> str:
-        """Run NRQL query"""
-        result = await read_op(client, "nrql_query", params)
-        return json.dumps(result, indent=2, default=str)
+    @server.list_tools()
+    async def handle_list_tools():
+        return [
+            Tool(name="nrql_query", description="Run NRQL query", inputSchema={"type": "object"}),
+            Tool(name="list_alert_policies", description="List alert policies", inputSchema={"type": "object"}),
+            Tool(name="get_alert_violations", description="Get alert violations", inputSchema={"type": "object"}),
+            Tool(name="list_dashboards", description="List dashboards", inputSchema={"type": "object"}),
+            Tool(name="get_entity_details", description="Get entity details", inputSchema={"type": "object"}),
+            Tool(name="list_synthetics", description="List Synthetic monitors", inputSchema={"type": "object"}),
+            Tool(name="get_sli_status", description="Get SLI/SLO status", inputSchema={"type": "object"}),
+            Tool(name="list_workloads", description="List workloads", inputSchema={"type": "object"}),
+            Tool(name="get_apm_summary", description="Get APM summary", inputSchema={"type": "object"}),
+            Tool(name="get_infra_hosts", description="List infrastructure hosts", inputSchema={"type": "object"}),
+            Tool(name="create_alert_policy", description="Create alert policy", inputSchema={"type": "object"}),
+            Tool(name="create_alert_condition", description="Create alert condition", inputSchema={"type": "object"}),
+            Tool(name="create_dashboard", description="Create dashboard", inputSchema={"type": "object"}),
+            Tool(
+                name="create_synthetic_monitor",
+                description="Create Synthetic monitor",
+                inputSchema={"type": "object"},
+            ),
+            Tool(name="create_workload", description="Create workload", inputSchema={"type": "object"}),
+            Tool(name="tag_entity", description="Tag an entity", inputSchema={"type": "object"}),
+        ]
 
-    @server.tool()
-    async def list_alert_policies(params: dict) -> str:
-        """List alert policies"""
-        result = await read_op(client, "list_alert_policies", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def get_alert_violations(params: dict) -> str:
-        """Get alert violations"""
-        result = await read_op(client, "get_alert_violations", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def list_dashboards(params: dict) -> str:
-        """List dashboards"""
-        result = await read_op(client, "list_dashboards", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def get_entity_details(params: dict) -> str:
-        """Get entity details"""
-        result = await read_op(client, "get_entity_details", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def list_synthetics(params: dict) -> str:
-        """List Synthetic monitors"""
-        result = await read_op(client, "list_synthetics", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def get_sli_status(params: dict) -> str:
-        """Get SLI/SLO status"""
-        result = await read_op(client, "get_sli_status", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def list_workloads(params: dict) -> str:
-        """List workloads"""
-        result = await read_op(client, "list_workloads", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def get_apm_summary(params: dict) -> str:
-        """Get APM summary"""
-        result = await read_op(client, "get_apm_summary", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def get_infra_hosts(params: dict) -> str:
-        """List infrastructure hosts"""
-        result = await read_op(client, "get_infra_hosts", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def create_alert_policy(params: dict) -> str:
-        """Create alert policy"""
-        result = await write_op(runner, "create_alert_policy", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def create_alert_condition(params: dict) -> str:
-        """Create alert condition"""
-        result = await write_op(runner, "create_alert_condition", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def create_dashboard(params: dict) -> str:
-        """Create dashboard"""
-        result = await write_op(runner, "create_dashboard", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def create_synthetic_monitor(params: dict) -> str:
-        """Create Synthetic monitor"""
-        result = await write_op(runner, "create_synthetic_monitor", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def create_workload(params: dict) -> str:
-        """Create workload"""
-        result = await write_op(runner, "create_workload", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def tag_entity(params: dict) -> str:
-        """Tag an entity"""
-        result = await write_op(runner, "tag_entity", params)
-        return json.dumps(result, indent=2, default=str)
+    @server.call_tool()
+    async def handle_call_tool(name: str, arguments: dict):
+        if name == "nrql_query":
+            result = await read_op(client, "nrql_query", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_alert_policies":
+            result = await read_op(client, "list_alert_policies", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "get_alert_violations":
+            result = await read_op(client, "get_alert_violations", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_dashboards":
+            result = await read_op(client, "list_dashboards", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "get_entity_details":
+            result = await read_op(client, "get_entity_details", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_synthetics":
+            result = await read_op(client, "list_synthetics", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "get_sli_status":
+            result = await read_op(client, "get_sli_status", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_workloads":
+            result = await read_op(client, "list_workloads", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "get_apm_summary":
+            result = await read_op(client, "get_apm_summary", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "get_infra_hosts":
+            result = await read_op(client, "get_infra_hosts", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "create_alert_policy":
+            result = await write_op(runner, "create_alert_policy", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "create_alert_condition":
+            result = await write_op(runner, "create_alert_condition", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "create_dashboard":
+            result = await write_op(runner, "create_dashboard", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "create_synthetic_monitor":
+            result = await write_op(runner, "create_synthetic_monitor", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "create_workload":
+            result = await write_op(runner, "create_workload", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "tag_entity":
+            result = await write_op(runner, "tag_entity", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
 
     return server
 
 
 def main():
-    """Run the New Relic MCP server."""
+    """Run the MCP server."""
     logging.basicConfig(level=logging.INFO)
     server = create_newrelic_server()
-    asyncio.run(run_server(server))
+    asyncio.run(_run(server))
+
+
+async def _run(server):
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream)
 
 
 if __name__ == "__main__":

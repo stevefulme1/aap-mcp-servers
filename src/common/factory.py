@@ -1,20 +1,11 @@
 """Server factory for creating MCP servers."""
 
 import logging
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
 logger = logging.getLogger(__name__)
-
-
-async def read_op(client, operation, params):
-    """Execute a read operation (direct API, fast)."""
-    return await client.query(operation, params)
-
-
-async def write_op(runner, operation, params):
-    """Execute a write operation (through Ansible, governed)."""
-    return await runner.execute(operation, params)
 
 
 def create_server(name):

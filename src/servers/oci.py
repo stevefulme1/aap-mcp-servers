@@ -1,133 +1,132 @@
-"""MCP Server for Oracle Cloud Infrastructure."""
+"""MCP Server for MCP Server for Oracle Cloud Infrastructure."""
 
 import asyncio
 import json
 import logging
 
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent
+
 from src.common.client import BaseClient
 from src.common.bridge import AnsibleBridge
-from src.common.factory import create_server, read_op, write_op, run_server
 
 logger = logging.getLogger(__name__)
 
 
+async def read_op(client, operation, params):
+    """Execute a read operation (direct API)."""
+    return await client.query(operation, params)
+
+
+async def write_op(runner, operation, params):
+    """Execute a write operation (through Ansible)."""
+    return await runner.execute(operation, params)
+
+
 class OciClient(BaseClient):
-    """Direct API client for Oracle Cloud Infrastructure."""
+    """Direct API client for MCP Server for Oracle Cloud Infrastructure."""
 
     def __init__(self):
         super().__init__("OCI_HOST", "OCI_API_KEY")
 
 
 def create_oci_server():
-    """Create and configure the Oracle Cloud Infrastructure MCP server."""
-    server = create_server("mcp-oci")
+    """Create and configure the MCP server."""
+    server = Server("mcp-oci")
     client = OciClient()
-    runner = AnsibleBridge("stevefulme1.oci_cloud")
+    runner = AnsibleBridge("stevefulme1.oci")
 
-    @server.tool()
-    async def list_instances(params: dict) -> str:
-        """List compute instances"""
-        result = await read_op(client, "list_instances", params)
-        return json.dumps(result, indent=2, default=str)
+    @server.list_tools()
+    async def handle_list_tools():
+        return [
+            Tool(name="list_instances", description="List compute instances", inputSchema={"type": "object"}),
+            Tool(name="list_vcns", description="List VCNs", inputSchema={"type": "object"}),
+            Tool(name="list_subnets", description="List subnets", inputSchema={"type": "object"}),
+            Tool(name="list_databases", description="List databases", inputSchema={"type": "object"}),
+            Tool(name="list_buckets", description="List Object Storage buckets", inputSchema={"type": "object"}),
+            Tool(name="list_load_balancers", description="List load balancers", inputSchema={"type": "object"}),
+            Tool(name="get_compartment_usage", description="Get compartment usage", inputSchema={"type": "object"}),
+            Tool(name="list_security_lists", description="List security lists", inputSchema={"type": "object"}),
+            Tool(name="list_block_volumes", description="List block volumes", inputSchema={"type": "object"}),
+            Tool(
+                name="get_availability_domains",
+                description="Get availability domains",
+                inputSchema={"type": "object"},
+            ),
+            Tool(name="get_limits", description="Get service limits", inputSchema={"type": "object"}),
+            Tool(name="create_instance", description="Create compute instance", inputSchema={"type": "object"}),
+            Tool(name="create_vcn", description="Create VCN", inputSchema={"type": "object"}),
+            Tool(name="create_bucket", description="Create Object Storage bucket", inputSchema={"type": "object"}),
+            Tool(name="create_database", description="Create database", inputSchema={"type": "object"}),
+            Tool(name="manage_security_list", description="Manage security list rules", inputSchema={"type": "object"}),
+        ]
 
-    @server.tool()
-    async def list_vcns(params: dict) -> str:
-        """List VCNs"""
-        result = await read_op(client, "list_vcns", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def list_subnets(params: dict) -> str:
-        """List subnets"""
-        result = await read_op(client, "list_subnets", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def list_databases(params: dict) -> str:
-        """List databases"""
-        result = await read_op(client, "list_databases", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def list_buckets(params: dict) -> str:
-        """List Object Storage buckets"""
-        result = await read_op(client, "list_buckets", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def list_load_balancers(params: dict) -> str:
-        """List load balancers"""
-        result = await read_op(client, "list_load_balancers", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def get_compartment_usage(params: dict) -> str:
-        """Get compartment usage"""
-        result = await read_op(client, "get_compartment_usage", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def list_security_lists(params: dict) -> str:
-        """List security lists"""
-        result = await read_op(client, "list_security_lists", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def list_block_volumes(params: dict) -> str:
-        """List block volumes"""
-        result = await read_op(client, "list_block_volumes", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def get_availability_domains(params: dict) -> str:
-        """Get availability domains"""
-        result = await read_op(client, "get_availability_domains", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def get_limits(params: dict) -> str:
-        """Get service limits"""
-        result = await read_op(client, "get_limits", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def create_instance(params: dict) -> str:
-        """Create compute instance"""
-        result = await write_op(runner, "create_instance", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def create_vcn(params: dict) -> str:
-        """Create VCN"""
-        result = await write_op(runner, "create_vcn", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def create_bucket(params: dict) -> str:
-        """Create Object Storage bucket"""
-        result = await write_op(runner, "create_bucket", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def create_database(params: dict) -> str:
-        """Create database"""
-        result = await write_op(runner, "create_database", params)
-        return json.dumps(result, indent=2, default=str)
-
-    @server.tool()
-    async def manage_security_list(params: dict) -> str:
-        """Manage security list rules"""
-        result = await write_op(runner, "manage_security_list", params)
-        return json.dumps(result, indent=2, default=str)
+    @server.call_tool()
+    async def handle_call_tool(name: str, arguments: dict):
+        if name == "list_instances":
+            result = await read_op(client, "list_instances", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_vcns":
+            result = await read_op(client, "list_vcns", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_subnets":
+            result = await read_op(client, "list_subnets", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_databases":
+            result = await read_op(client, "list_databases", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_buckets":
+            result = await read_op(client, "list_buckets", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_load_balancers":
+            result = await read_op(client, "list_load_balancers", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "get_compartment_usage":
+            result = await read_op(client, "get_compartment_usage", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_security_lists":
+            result = await read_op(client, "list_security_lists", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "list_block_volumes":
+            result = await read_op(client, "list_block_volumes", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "get_availability_domains":
+            result = await read_op(client, "get_availability_domains", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "get_limits":
+            result = await read_op(client, "get_limits", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "create_instance":
+            result = await write_op(runner, "create_instance", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "create_vcn":
+            result = await write_op(runner, "create_vcn", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "create_bucket":
+            result = await write_op(runner, "create_bucket", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "create_database":
+            result = await write_op(runner, "create_database", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        if name == "manage_security_list":
+            result = await write_op(runner, "manage_security_list", arguments)
+            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
 
     return server
 
 
 def main():
-    """Run the Oracle Cloud Infrastructure MCP server."""
+    """Run the MCP server."""
     logging.basicConfig(level=logging.INFO)
     server = create_oci_server()
-    asyncio.run(run_server(server))
+    asyncio.run(_run(server))
+
+
+async def _run(server):
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream)
 
 
 if __name__ == "__main__":
