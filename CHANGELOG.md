@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Maintenance
+- Expanded .gitignore with standard patterns for secrets, IDE files, and OS metadata
+
 ## [1.0.0] - 2026-05-18
 
 ### Added
