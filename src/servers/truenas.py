@@ -1,8 +1,9 @@
-"""MCP Server for MCP Server for TrueNAS."""
+"""MCP Server for TrueNAS storage platform."""
 
 import asyncio
 import json
 import logging
+import os
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -13,28 +14,88 @@ from src.common.bridge import AnsibleBridge
 
 logger = logging.getLogger(__name__)
 
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
 
 async def read_op(client, operation, params):
-    """Execute a read operation (direct API)."""
     return await client.query(operation, params)
 
 
 async def write_op(runner, operation, params):
-    """Execute a write operation (through Ansible)."""
     return await runner.execute(operation, params)
 
 
-class TruenasClient(BaseClient):
-    """Direct API client for MCP Server for TrueNAS."""
+class TrueNASClient(BaseClient):
+    """Direct API client for TrueNAS.
+
+    Uses Bearer token auth.  Base URL: http(s)://{host}/api/v2.0
+    """
 
     def __init__(self):
-        super().__init__("TRUENAS_HOST", "TRUENAS_API_KEY")
+        self.host = os.environ.get("TRUENAS_HOST", "localhost")
+        self.api_key = os.environ.get("TRUENAS_API_KEY", "")
+        self.scheme = os.environ.get("TRUENAS_SCHEME", "http")
+        self.verify_ssl = os.environ.get("TRUENAS_VERIFY_SSL", "false").lower() == "true"
+
+    def _headers(self):
+        return {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+    def _tn_get(self, path, params=None):
+        url = f"{self.scheme}://{self.host}/api/v2.0{path}"
+        resp = requests.get(url, headers=self._headers(), params=params,
+                            timeout=30, verify=self.verify_ssl)
+        resp.raise_for_status()
+        return resp.json()
+
+    # -- read operations --
+
+    def list_pools(self, params):
+        return self._tn_get("/pool")
+
+    def list_datasets(self, params):
+        return self._tn_get("/pool/dataset")
+
+    def list_snapshots(self, params):
+        return self._tn_get("/zfs/snapshot")
+
+    def list_smb_shares(self, params):
+        return self._tn_get("/sharing/smb")
+
+    def list_nfs_shares(self, params):
+        return self._tn_get("/sharing/nfs")
+
+    def list_iscsi_targets(self, params):
+        return self._tn_get("/iscsi/target")
+
+    def get_system_info(self, params):
+        return self._tn_get("/system/info")
+
+    def list_replication_tasks(self, params):
+        return self._tn_get("/replication")
+
+    def list_users(self, params):
+        return self._tn_get("/user")
+
+    def get_alerts(self, params):
+        return self._tn_get("/alert/list")
+
+    def get_pool_status(self, params):
+        pool_id = params.get("id", "")
+        if pool_id:
+            return self._tn_get(f"/pool/id/{pool_id}")
+        return self._tn_get("/pool")
 
 
 def create_truenas_server():
-    """Create and configure the MCP server."""
     server = Server("mcp-truenas")
-    client = TruenasClient()
+    client = TrueNASClient()
     runner = AnsibleBridge("stevefulme1.truenas")
 
     @server.list_tools()
@@ -50,71 +111,41 @@ def create_truenas_server():
             Tool(name="list_replication_tasks", description="List replication tasks", inputSchema={"type": "object"}),
             Tool(name="list_users", description="List users", inputSchema={"type": "object"}),
             Tool(name="get_alerts", description="Get active alerts", inputSchema={"type": "object"}),
-            Tool(name="get_pool_status", description="Get detailed pool status", inputSchema={"type": "object"}),
-            Tool(name="create_dataset", description="Create ZFS dataset", inputSchema={"type": "object"}),
-            Tool(name="create_snapshot", description="Create snapshot", inputSchema={"type": "object"}),
-            Tool(name="create_smb_share", description="Create SMB share", inputSchema={"type": "object"}),
-            Tool(name="create_nfs_share", description="Create NFS share", inputSchema={"type": "object"}),
-            Tool(name="configure_replication", description="Configure replication", inputSchema={"type": "object"}),
+            Tool(
+                name="get_pool_status",
+                description="Get detailed pool status",
+                inputSchema={
+                    "type": "object",
+                    "properties": {"id": {"type": "string", "description": "Pool ID"}},
+                },
+            ),
+            Tool(name="create_dataset", description="Create ZFS dataset (via Ansible)", inputSchema={"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}),
+            Tool(name="create_snapshot", description="Create snapshot (via Ansible)", inputSchema={"type": "object", "properties": {"dataset": {"type": "string"}, "name": {"type": "string"}}, "required": ["dataset", "name"]}),
+            Tool(name="create_smb_share", description="Create SMB share (via Ansible)", inputSchema={"type": "object", "properties": {"path": {"type": "string"}, "name": {"type": "string"}}, "required": ["path", "name"]}),
+            Tool(name="create_nfs_share", description="Create NFS share (via Ansible)", inputSchema={"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
+            Tool(name="configure_replication", description="Configure replication (via Ansible)", inputSchema={"type": "object", "properties": {"source_dataset": {"type": "string"}, "target_dataset": {"type": "string"}}, "required": ["source_dataset", "target_dataset"]}),
         ]
 
     @server.call_tool()
     async def handle_call_tool(name: str, arguments: dict):
-        if name == "list_pools":
-            result = await read_op(client, "list_pools", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_datasets":
-            result = await read_op(client, "list_datasets", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_snapshots":
-            result = await read_op(client, "list_snapshots", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_smb_shares":
-            result = await read_op(client, "list_smb_shares", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_nfs_shares":
-            result = await read_op(client, "list_nfs_shares", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_iscsi_targets":
-            result = await read_op(client, "list_iscsi_targets", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "get_system_info":
-            result = await read_op(client, "get_system_info", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_replication_tasks":
-            result = await read_op(client, "list_replication_tasks", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_users":
-            result = await read_op(client, "list_users", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "get_alerts":
-            result = await read_op(client, "get_alerts", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "get_pool_status":
-            result = await read_op(client, "get_pool_status", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "create_dataset":
-            result = await write_op(runner, "create_dataset", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "create_snapshot":
-            result = await write_op(runner, "create_snapshot", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "create_smb_share":
-            result = await write_op(runner, "create_smb_share", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "create_nfs_share":
-            result = await write_op(runner, "create_nfs_share", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "configure_replication":
-            result = await write_op(runner, "configure_replication", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
+        read_tools = {
+            "list_pools", "list_datasets", "list_snapshots", "list_smb_shares",
+            "list_nfs_shares", "list_iscsi_targets", "get_system_info",
+            "list_replication_tasks", "list_users", "get_alerts", "get_pool_status",
+        }
+        write_tools = {"create_dataset", "create_snapshot", "create_smb_share", "create_nfs_share", "configure_replication"}
+        if name in read_tools:
+            result = await read_op(client, name, arguments)
+        elif name in write_tools:
+            result = await write_op(runner, name, arguments)
+        else:
+            result = {"error": f"Unknown tool: {name}"}
+        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
 
     return server
 
 
 def main():
-    """Run the MCP server."""
     logging.basicConfig(level=logging.INFO)
     server = create_truenas_server()
     asyncio.run(_run(server))

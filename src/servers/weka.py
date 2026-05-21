@@ -1,8 +1,9 @@
-"""MCP Server for MCP Server for WekaIO Storage."""
+"""MCP Server for WekaIO Storage."""
 
 import asyncio
 import json
 import logging
+import os
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -13,26 +14,86 @@ from src.common.bridge import AnsibleBridge
 
 logger = logging.getLogger(__name__)
 
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
 
 async def read_op(client, operation, params):
-    """Execute a read operation (direct API)."""
     return await client.query(operation, params)
 
 
 async def write_op(runner, operation, params):
-    """Execute a write operation (through Ansible)."""
     return await runner.execute(operation, params)
 
 
 class WekaClient(BaseClient):
-    """Direct API client for MCP Server for WekaIO Storage."""
+    """Direct API client for Weka.
+
+    Uses Bearer token auth.  Base URL: https://{host}:14000/api/v2
+    """
 
     def __init__(self):
-        super().__init__("WEKA_HOST", "WEKA_API_KEY")
+        self.host = os.environ.get("WEKA_HOST", "localhost")
+        self.port = os.environ.get("WEKA_PORT", "14000")
+        self.api_key = os.environ.get("WEKA_API_KEY", "")
+        self.verify_ssl = os.environ.get("WEKA_VERIFY_SSL", "true").lower() == "true"
+
+    def _headers(self):
+        return {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+    def _weka_get(self, path, params=None):
+        url = f"https://{self.host}:{self.port}/api/v2{path}"
+        resp = requests.get(url, headers=self._headers(), params=params,
+                            timeout=30, verify=self.verify_ssl)
+        resp.raise_for_status()
+        return resp.json()
+
+    # -- read operations --
+
+    def list_filesystems(self, params):
+        return self._weka_get("/fileSystems")
+
+    def get_filesystem_stats(self, params):
+        fs_id = params.get("id", "")
+        if fs_id:
+            return self._weka_get(f"/fileSystems/{fs_id}")
+        return self._weka_get("/fileSystems")
+
+    def list_quotas(self, params):
+        return self._weka_get("/quotas")
+
+    def list_snapshots(self, params):
+        return self._weka_get("/snapshots")
+
+    def get_cluster_status(self, params):
+        return self._weka_get("/cluster")
+
+    def list_nfs_exports(self, params):
+        return self._weka_get("/nfs/permissions")
+
+    def list_s3_buckets(self, params):
+        return self._weka_get("/s3/buckets")
+
+    def get_tiering_status(self, params):
+        return self._weka_get("/objectStores")
+
+    def list_drives(self, params):
+        return self._weka_get("/drives")
+
+    def get_events(self, params):
+        return self._weka_get("/events")
+
+    def list_containers(self, params):
+        return self._weka_get("/containers")
 
 
 def create_weka_server():
-    """Create and configure the MCP server."""
     server = Server("mcp-weka")
     client = WekaClient()
     runner = AnsibleBridge("stevefulme1.weka")
@@ -41,7 +102,7 @@ def create_weka_server():
     async def handle_list_tools():
         return [
             Tool(name="list_filesystems", description="List Weka filesystems", inputSchema={"type": "object"}),
-            Tool(name="get_filesystem_stats", description="Get filesystem statistics", inputSchema={"type": "object"}),
+            Tool(name="get_filesystem_stats", description="Get filesystem statistics", inputSchema={"type": "object", "properties": {"id": {"type": "string", "description": "Filesystem ID"}}}),
             Tool(name="list_quotas", description="List filesystem quotas", inputSchema={"type": "object"}),
             Tool(name="list_snapshots", description="List snapshots", inputSchema={"type": "object"}),
             Tool(name="get_cluster_status", description="Get Weka cluster status", inputSchema={"type": "object"}),
@@ -51,70 +112,34 @@ def create_weka_server():
             Tool(name="list_drives", description="List cluster drives", inputSchema={"type": "object"}),
             Tool(name="get_events", description="Get recent events", inputSchema={"type": "object"}),
             Tool(name="list_containers", description="List containers", inputSchema={"type": "object"}),
-            Tool(name="create_filesystem", description="Create a filesystem", inputSchema={"type": "object"}),
-            Tool(name="create_snapshot", description="Create a snapshot", inputSchema={"type": "object"}),
-            Tool(name="set_quota", description="Set filesystem quota", inputSchema={"type": "object"}),
-            Tool(name="create_nfs_export", description="Create NFS export", inputSchema={"type": "object"}),
-            Tool(name="create_s3_bucket", description="Create S3 bucket", inputSchema={"type": "object"}),
+            Tool(name="create_filesystem", description="Create a filesystem (via Ansible)", inputSchema={"type": "object", "properties": {"name": {"type": "string"}, "total_capacity": {"type": "string"}}, "required": ["name"]}),
+            Tool(name="create_snapshot", description="Create a snapshot (via Ansible)", inputSchema={"type": "object", "properties": {"filesystem": {"type": "string"}, "name": {"type": "string"}}, "required": ["filesystem", "name"]}),
+            Tool(name="set_quota", description="Set filesystem quota (via Ansible)", inputSchema={"type": "object", "properties": {"path": {"type": "string"}, "hard_limit": {"type": "string"}}, "required": ["path"]}),
+            Tool(name="create_nfs_export", description="Create NFS export (via Ansible)", inputSchema={"type": "object", "properties": {"filesystem": {"type": "string"}, "path": {"type": "string"}}, "required": ["filesystem"]}),
+            Tool(name="create_s3_bucket", description="Create S3 bucket (via Ansible)", inputSchema={"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}),
         ]
 
     @server.call_tool()
     async def handle_call_tool(name: str, arguments: dict):
-        if name == "list_filesystems":
-            result = await read_op(client, "list_filesystems", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "get_filesystem_stats":
-            result = await read_op(client, "get_filesystem_stats", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_quotas":
-            result = await read_op(client, "list_quotas", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_snapshots":
-            result = await read_op(client, "list_snapshots", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "get_cluster_status":
-            result = await read_op(client, "get_cluster_status", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_nfs_exports":
-            result = await read_op(client, "list_nfs_exports", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_s3_buckets":
-            result = await read_op(client, "list_s3_buckets", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "get_tiering_status":
-            result = await read_op(client, "get_tiering_status", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_drives":
-            result = await read_op(client, "list_drives", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "get_events":
-            result = await read_op(client, "get_events", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "list_containers":
-            result = await read_op(client, "list_containers", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "create_filesystem":
-            result = await write_op(runner, "create_filesystem", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "create_snapshot":
-            result = await write_op(runner, "create_snapshot", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "set_quota":
-            result = await write_op(runner, "set_quota", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "create_nfs_export":
-            result = await write_op(runner, "create_nfs_export", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        if name == "create_s3_bucket":
-            result = await write_op(runner, "create_s3_bucket", arguments)
-            return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
+        read_tools = {
+            "list_filesystems", "get_filesystem_stats", "list_quotas",
+            "list_snapshots", "get_cluster_status", "list_nfs_exports",
+            "list_s3_buckets", "get_tiering_status", "list_drives",
+            "get_events", "list_containers",
+        }
+        write_tools = {"create_filesystem", "create_snapshot", "set_quota", "create_nfs_export", "create_s3_bucket"}
+        if name in read_tools:
+            result = await read_op(client, name, arguments)
+        elif name in write_tools:
+            result = await write_op(runner, name, arguments)
+        else:
+            result = {"error": f"Unknown tool: {name}"}
+        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
 
     return server
 
 
 def main():
-    """Run the MCP server."""
     logging.basicConfig(level=logging.INFO)
     server = create_weka_server()
     asyncio.run(_run(server))
